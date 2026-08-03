@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./auth.js";
 import { registerPlaylistRoutes } from "./routes/playlist.js";
 import { registerPlayersRoutes } from "./routes/players.js";
 import { registerSpinRoutes } from "./routes/spin.js";
+import { registerPlaybackRoutes } from "./routes/playback.js";
 import { loadState } from "./state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +41,7 @@ await registerAuthRoutes(app);
 await registerPlaylistRoutes(app);
 await registerPlayersRoutes(app);
 await registerSpinRoutes(app);
+await registerPlaybackRoutes(app);
 
 // Warm the state cache on boot so the file is created if missing and any
 // migration in loadState runs before the first request.

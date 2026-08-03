@@ -312,3 +312,14 @@ body {
   justify-content: center;
   margin-top: 0.75rem;
 }
+
+.playhint {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.err {
+  color: #ff9a9a;
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}

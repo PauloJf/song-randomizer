@@ -64,4 +64,10 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(player ? { player } : {}),
     }),
+  play: (trackId: string) =>
+    json<{ ok: true }>("/api/play", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trackId }),
+    }),
 };

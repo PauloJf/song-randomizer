@@ -1,4 +1,17 @@
+import { useState } from "react";
 import type { Track } from "../api";
+import { api } from "../api";
+
+type PlayState =
+  | { kind: "idle" }
+  | { kind: "playing" }
+  | { kind: "played" }
+  | {
+      kind: "no_device";
+      deepLink: string;
+      webLink: string;
+    }
+  | { kind: "error"; message: string };
 
 export function ResultCard({
   player,
@@ -13,10 +26,57 @@ export function ResultCard({
   onUndo: () => void;
   busy?: boolean;
 }) {
+  const [playState, setPlayState] = useState<PlayState>({ kind: "idle" });
   const mins = Math.floor(track.durationMs / 60_000);
   const secs = Math.floor((track.durationMs % 60_000) / 1000)
     .toString()
     .padStart(2, "0");
+
+  async function handlePlay() {
+    setPlayState({ kind: "playing" });
+    try {
+      await api.play(track.id);
+      setPlayState({ kind: "played" });
+    } catch (e) {
+      const err = e as Error & {
+        status?: number;
+        body?: {
+          reason?: string;
+          deepLink?: string;
+          webLink?: string;
+          detail?: string;
+        };
+      };
+      if (err.status === 409 && err.body?.reason === "no_active_device") {
+        setPlayState({
+          kind: "no_device",
+          deepLink: err.body.deepLink ?? `spotify:track:${track.id}`,
+          webLink:
+            err.body.webLink ?? `https://open.spotify.com/track/${track.id}`,
+        });
+      } else if (err.status === 403) {
+        setPlayState({
+          kind: "error",
+          message:
+            err.body?.detail ??
+            "Playback needs Spotify Premium or the track is restricted.",
+        });
+      } else if (err.status === 429) {
+        setPlayState({
+          kind: "error",
+          message: "Rate-limited by Spotify. Try again in a moment.",
+        });
+      } else if (err.status === 428) {
+        setPlayState({ kind: "error", message: "Not connected to Spotify." });
+      } else {
+        setPlayState({
+          kind: "error",
+          message: err.body?.detail ?? err.message ?? "Playback failed.",
+        });
+      }
+    }
+  }
+
   return (
     <section className="result">
       <p className="result-caller">{player}'s spin</p>
@@ -33,9 +93,41 @@ export function ResultCard({
         {track.album} · {mins}:{secs}
       </p>
       <div className="result-actions">
-        <button className="btn primary" disabled title="Wired up in Phase 5">
-          Play
-        </button>
+        {playState.kind === "no_device" ? (
+          <>
+            <a
+              className="btn primary"
+              href={playState.deepLink}
+              onClick={() => {
+                // On desktop the deep link may not resolve; fall back to web
+                // after a short delay if the tab is still focused.
+                setTimeout(() => {
+                  if (!document.hidden) window.location.href = playState.webLink;
+                }, 1500);
+              }}
+            >
+              Open in Spotify
+            </a>
+            <button
+              className="btn"
+              onClick={() => setPlayState({ kind: "idle" })}
+            >
+              Retry
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn primary"
+            onClick={handlePlay}
+            disabled={playState.kind === "playing"}
+          >
+            {playState.kind === "playing"
+              ? "Starting…"
+              : playState.kind === "played"
+                ? "Playing"
+                : "Play"}
+          </button>
+        )}
         <button className="btn" onClick={onUndo} disabled={busy}>
           Undo
         </button>
@@ -43,6 +135,14 @@ export function ResultCard({
           Next spin
         </button>
       </div>
+      {playState.kind === "no_device" && (
+        <p className="dim playhint">
+          Open Spotify and play anything once to register the speaker.
+        </p>
+      )}
+      {playState.kind === "error" && (
+        <p className="err">{playState.message}</p>
+      )}
     </section>
   );
 }
