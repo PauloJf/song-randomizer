@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    image: spotify-roulette:latest
+    container_name: spotify-roulette
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID}
+      PLAYLIST_ID: ${PLAYLIST_ID}
+      PLAYERS: ${PLAYERS}
+      BASE_URL: ${BASE_URL}
+      PORT: ${PORT:-3000}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      STATE_DIR: /data
+      NODE_ENV: production
+    volumes:
+      - roulette-state:/data
+
+volumes:
+  roulette-state:

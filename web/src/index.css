@@ -1,0 +1,47 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #0f0f10;
+  color: #f5f5f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.scaffold {
+  text-align: center;
+  padding: 1.5rem;
+  max-width: 28rem;
+}
+
+.scaffold h1 {
+  margin: 0 0 0.25rem;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.tag {
+  margin: 0 0 1.5rem;
+  color: #9aa0a6;
+}
+
+.health {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: #1a1a1c;
+  border: 1px solid #262629;
+}
+
+.err {
+  color: #ff8080;
+  margin: 0;
+}
