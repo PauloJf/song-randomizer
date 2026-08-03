@@ -5,6 +5,9 @@ import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyCookie from "@fastify/cookie";
 import { registerAuthRoutes } from "./auth.js";
+import { registerPlaylistRoutes } from "./routes/playlist.js";
+import { registerPlayersRoutes } from "./routes/players.js";
+import { registerSpinRoutes } from "./routes/spin.js";
 import { loadState } from "./state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,6 +37,9 @@ await app.register(fastifyCookie, {
 });
 
 await registerAuthRoutes(app);
+await registerPlaylistRoutes(app);
+await registerPlayersRoutes(app);
+await registerSpinRoutes(app);
 
 // Warm the state cache on boot so the file is created if missing and any
 // migration in loadState runs before the first request.
