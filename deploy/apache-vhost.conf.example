@@ -1,0 +1,38 @@
+# Example Apache vhost for Spotify Roulette.
+# Assumes:
+#   - The container publishes port 3000 on the VPS (localhost only).
+#   - You already terminate HTTPS with an existing cert (mod_ssl / Let's Encrypt).
+#   - mod_proxy and mod_proxy_http are enabled: `a2enmod proxy proxy_http`.
+#
+# Copy to /etc/apache2/sites-available/spotify-roulette.conf, replace
+# your-domain.example, then `a2ensite spotify-roulette && systemctl reload apache2`.
+
+<VirtualHost *:443>
+    ServerName your-domain.example
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/your-domain.example/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/your-domain.example/privkey.pem
+
+    # Preserve the Host header so Fastify sees the right origin — important
+    # for the OAuth redirect_uri check.
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    ProxyPass        / http://127.0.0.1:3000/
+    ProxyPassReverse / http://127.0.0.1:3000/
+
+    # A little quality-of-life: no caching for API responses.
+    <LocationMatch "^/api/">
+        Header set Cache-Control "no-store"
+    </LocationMatch>
+
+    ErrorLog  ${APACHE_LOG_DIR}/spotify-roulette.error.log
+    CustomLog ${APACHE_LOG_DIR}/spotify-roulette.access.log combined
+</VirtualHost>
+
+# Redirect plain HTTP to HTTPS (or leave to your existing global redirect).
+<VirtualHost *:80>
+    ServerName your-domain.example
+    Redirect permanent / https://your-domain.example/
+</VirtualHost>
