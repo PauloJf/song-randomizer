@@ -3,6 +3,9 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
+import fastifyCookie from "@fastify/cookie";
+import { registerAuthRoutes } from "./auth.js";
+import { loadState } from "./state.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +22,22 @@ const staticCandidates = [
 const staticRoot = staticCandidates.find((p) => existsSync(p));
 
 const app = Fastify({ logger: true });
+
+const cookieSecret = process.env.COOKIE_SECRET;
+if (!cookieSecret || cookieSecret.length < 16) {
+  app.log.warn(
+    "COOKIE_SECRET is missing or too short (<16 chars). The PKCE cookie won't be signed strongly.",
+  );
+}
+await app.register(fastifyCookie, {
+  secret: cookieSecret ?? "dev-cookie-secret-change-me-please",
+});
+
+await registerAuthRoutes(app);
+
+// Warm the state cache on boot so the file is created if missing and any
+// migration in loadState runs before the first request.
+await loadState();
 
 app.get("/api/health", async () => ({
   status: "ok",
