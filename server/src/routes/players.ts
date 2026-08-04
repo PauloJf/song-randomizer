@@ -1,11 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { loadState } from "../state.js";
+import { getDb } from "../db.js";
 import { getPlaylist } from "../playlist.js";
 import { SpotifyError } from "../spotify.js";
 
 export async function registerPlayersRoutes(app: FastifyInstance) {
-  app.get("/api/players", async (_req, reply) => {
-    const state = await loadState();
+  app.get("/api/players", async () => {
     let total: number | null = null;
     try {
       const p = await getPlaylist();
@@ -14,11 +13,13 @@ export async function registerPlayersRoutes(app: FastifyInstance) {
       if (!(err instanceof SpotifyError)) throw err;
       // Fall through: return names + heard without a "remaining" count.
     }
-    const players = Object.entries(state.players).map(([name, data]) => ({
-      name,
-      heard: data.heard.length,
-      remaining: total == null ? null : Math.max(0, total - data.heard.length),
-    }));
+    const players = getDb()
+      .listPlayers()
+      .map((p) => ({
+        name: p.name,
+        heard: p.heardCount,
+        remaining: total == null ? null : Math.max(0, total - p.heardCount),
+      }));
     return { total, players };
   });
 }

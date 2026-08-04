@@ -1,11 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { getPlaylist } from "../playlist.js";
 import { SpotifyError } from "../spotify.js";
-import { loadState, mutateState } from "../state.js";
+import { getDb } from "../db.js";
 import { buildWheelOrder, pickTrackId } from "../spin.js";
 
 type SpinBody = { player?: unknown };
-type ResetBody = { player?: unknown };
 
 function playerName(b: unknown): string | null {
   if (b && typeof b === "object" && typeof (b as SpinBody).player === "string") {
@@ -35,14 +34,14 @@ export async function registerSpinRoutes(app: FastifyInstance) {
       throw err;
     }
 
-    const state = await loadState();
-    if (!state.players[player]) {
+    const db = getDb();
+    if (!db.hasPlayer(player)) {
       reply.code(404).send({ error: "unknown_player", player });
       return;
     }
 
     const allIds = playlist.tracks.map((t) => t.id);
-    const winnerId = pickTrackId(allIds, state.players[player].heard);
+    const winnerId = pickTrackId(allIds, db.getHeard(player));
     if (!winnerId) {
       reply.code(409).send({ error: "exhausted", reason: "exhausted" });
       return;
@@ -50,14 +49,7 @@ export async function registerSpinRoutes(app: FastifyInstance) {
     const track = playlist.tracks.find((t) => t.id === winnerId)!;
     const wheel = buildWheelOrder(allIds, winnerId);
 
-    await mutateState((st) => {
-      st.players[player].heard.push(winnerId);
-      st.spins.push({
-        player,
-        trackId: winnerId,
-        at: new Date().toISOString(),
-      });
-    });
+    db.recordSpin(player, { id: track.id, name: track.name, artist: track.artist });
 
     return {
       track,
@@ -67,17 +59,7 @@ export async function registerSpinRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/spin/undo", async (_req, reply) => {
-    const undone = await mutateState((st) => {
-      const last = st.spins.pop();
-      if (!last) return null;
-      const heard = st.players[last.player]?.heard;
-      if (heard) {
-        // Remove only the most-recent occurrence of that trackId.
-        const idx = heard.lastIndexOf(last.trackId);
-        if (idx >= 0) heard.splice(idx, 1);
-      }
-      return last;
-    });
+    const undone = getDb().undoLastSpin();
     if (!undone) {
       reply.code(404).send({ error: "no_spins_to_undo" });
       return;
@@ -86,20 +68,15 @@ export async function registerSpinRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/reset", async (req) => {
-    const body = (req.body ?? {}) as ResetBody;
+    const body = (req.body ?? {}) as { player?: unknown };
     const target =
       typeof body.player === "string" && body.player.length ? body.player : null;
-    await mutateState((st) => {
-      if (target) {
-        if (st.players[target]) {
-          st.players[target].heard = [];
-          st.spins = st.spins.filter((s) => s.player !== target);
-        }
-      } else {
-        for (const p of Object.values(st.players)) p.heard = [];
-        st.spins = [];
-      }
-    });
+    const db = getDb();
+    if (target) {
+      db.resetPlayer(target);
+    } else {
+      db.resetAll();
+    }
     return { reset: target ?? "all" };
   });
 }

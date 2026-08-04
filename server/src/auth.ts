@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { exchangeCode, isConnected, redirectUri } from "./spotify.js";
-import { mutateState } from "./state.js";
+import { getDb } from "./db.js";
 
 const SCOPES = [
   "playlist-read-private",
@@ -93,9 +93,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
     try {
       const tokens = await exchangeCode(query.code, payload.v);
-      await mutateState((st) => {
-        st.tokens = tokens;
-      });
+      getDb().setTokens(tokens);
     } catch (err) {
       req.log.error({ err }, "token exchange failed");
       reply.code(502).send({ error: "token_exchange_failed" });
@@ -105,5 +103,5 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     reply.redirect("/", 302);
   });
 
-  app.get("/api/auth/status", async () => ({ connected: await isConnected() }));
+  app.get("/api/auth/status", async () => ({ connected: isConnected() }));
 }

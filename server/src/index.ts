@@ -9,7 +9,7 @@ import { registerPlaylistRoutes } from "./routes/playlist.js";
 import { registerPlayersRoutes } from "./routes/players.js";
 import { registerSpinRoutes } from "./routes/spin.js";
 import { registerPlaybackRoutes } from "./routes/playback.js";
-import { loadState } from "./state.js";
+import { getDb } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,9 +43,9 @@ await registerPlayersRoutes(app);
 await registerSpinRoutes(app);
 await registerPlaybackRoutes(app);
 
-// Warm the state cache on boot so the file is created if missing and any
-// migration in loadState runs before the first request.
-await loadState();
+// Open the database on boot so schema creation and the one-time state.json
+// import run before the first request.
+getDb();
 
 app.get("/api/health", async () => ({
   status: "ok",

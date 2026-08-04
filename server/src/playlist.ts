@@ -1,5 +1,5 @@
 import { SpotifyError, spotifyFetch } from "./spotify.js";
-import { mutateState } from "./state.js";
+import { getDb } from "./db.js";
 
 export type Track = {
   id: string;
@@ -100,15 +100,11 @@ export async function getPlaylist(): Promise<{
   }
   const tracks = await fetchAllTracks();
   cache = { snapshotId: head.snapshot_id, tracks };
-  const stillInPlaylist = new Set(tracks.map((t) => t.id));
-  await mutateState((st) => {
-    if (st.playlistSnapshotId !== head.snapshot_id) {
-      for (const p of Object.values(st.players)) {
-        p.heard = p.heard.filter((id) => stillInPlaylist.has(id));
-      }
-      st.playlistSnapshotId = head.snapshot_id;
-    }
-  });
+  const db = getDb();
+  if (db.getSnapshotId() !== head.snapshot_id) {
+    db.pruneHeard(new Set(tracks.map((t) => t.id)));
+    db.setSnapshotId(head.snapshot_id);
+  }
   return cache;
 }
 

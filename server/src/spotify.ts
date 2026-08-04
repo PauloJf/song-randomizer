@@ -1,4 +1,5 @@
-import { loadState, mutateState, type Tokens } from "./state.js";
+import { getDb } from "./db.js";
+import type { Tokens } from "./types.js";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const API_BASE = "https://api.spotify.com/v1";
@@ -73,21 +74,19 @@ async function refresh(existing: Tokens): Promise<Tokens> {
 }
 
 export async function getAccessToken(): Promise<string | null> {
-  const s = await loadState();
-  if (!s.tokens) return null;
-  if (s.tokens.expires_at - Date.now() > REFRESH_MARGIN_MS) {
-    return s.tokens.access_token;
+  const db = getDb();
+  const tokens = db.getTokens();
+  if (!tokens) return null;
+  if (tokens.expires_at - Date.now() > REFRESH_MARGIN_MS) {
+    return tokens.access_token;
   }
-  const refreshed = await refresh(s.tokens);
-  await mutateState((st) => {
-    st.tokens = refreshed;
-  });
+  const refreshed = await refresh(tokens);
+  db.setTokens(refreshed);
   return refreshed.access_token;
 }
 
-export async function isConnected(): Promise<boolean> {
-  const s = await loadState();
-  return !!s.tokens;
+export function isConnected(): boolean {
+  return getDb().getTokens() !== null;
 }
 
 export class SpotifyError extends Error {
@@ -113,9 +112,9 @@ export async function spotifyFetch(
   const r = await fetch(url, { ...init, headers });
   if (r.status === 401 && retryOn401) {
     // Force-refresh by pushing expiry into the past, then retry once.
-    await mutateState((st) => {
-      if (st.tokens) st.tokens.expires_at = 0;
-    });
+    const db = getDb();
+    const tokens = db.getTokens();
+    if (tokens) db.setTokens({ ...tokens, expires_at: 0 });
     return spotifyFetch(pathOrUrl, init, { retryOn401: false });
   }
   return r;
