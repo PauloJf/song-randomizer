@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getDb } from "../db.js";
-import { getPlaylist } from "../playlist.js";
-import { SpotifyError } from "../spotify.js";
+import { clearPlaylistCache, getPlaylist, resolveUserNames } from "../playlist.js";
+import { isConnected, SpotifyError, spotifyFetch } from "../spotify.js";
 import { attemptDelay, clearAttempts } from "../ratelimit.js";
 
 const COOKIE_NAME = "admin";
@@ -55,6 +55,45 @@ function requireAdmin(req: FastifyRequest, reply: FastifyReply): boolean {
     return false;
   }
   return true;
+}
+
+type Overview = {
+  connected: boolean;
+  playlist: { name: string; tracks: number; snapshotId: string } | null;
+  playlistError: string | null;
+  devices: { id: string; name: string; type: string; is_active: boolean }[] | null;
+};
+
+async function buildOverview(): Promise<Overview> {
+  const connected = isConnected();
+  const overview: Overview = {
+    connected,
+    playlist: null,
+    playlistError: null,
+    devices: null,
+  };
+  if (!connected) return overview;
+  try {
+    const p = await getPlaylist();
+    overview.playlist = {
+      name: p.name,
+      tracks: p.tracks.length,
+      snapshotId: p.snapshotId,
+    };
+  } catch (err) {
+    overview.playlistError =
+      err instanceof SpotifyError ? err.message : "playlist fetch failed";
+  }
+  try {
+    const r = await spotifyFetch("/me/player/devices");
+    if (r.ok) {
+      const j = (await r.json()) as { devices: Overview["devices"] };
+      overview.devices = j.devices ?? [];
+    }
+  } catch {
+    // devices stay null — the panel shows "unavailable"
+  }
+  return overview;
 }
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -170,6 +209,95 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (target) db.resetPlayer(target);
     else db.resetAll();
     return { reset: target ?? "all", players: db.listPlayers() };
+  });
+
+  app.get("/api/admin/stats", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const base = getDb().stats();
+    // Playlist contributor stats: who added what, from Spotify's added_by.
+    let playlistStats: {
+      totalTracks: number;
+      totalMs: number;
+      avgMs: number;
+      adders: {
+        name: string;
+        player: string | null;
+        songs: number;
+        totalMs: number;
+        avgMs: number;
+      }[];
+    } | null = null;
+    try {
+      const p = await getPlaylist();
+      const byAdder = new Map<string, { songs: number; totalMs: number }>();
+      let totalMs = 0;
+      for (const t of p.tracks) {
+        totalMs += t.durationMs;
+        const key = t.addedBy ?? "unknown";
+        const agg = byAdder.get(key) ?? { songs: 0, totalMs: 0 };
+        agg.songs++;
+        agg.totalMs += t.durationMs;
+        byAdder.set(key, agg);
+      }
+      const names = await resolveUserNames(
+        [...byAdder.keys()].filter((k) => k !== "unknown"),
+      );
+      // Contributors are usually the players themselves — link them up when
+      // the Spotify display name matches a player name (case-insensitive).
+      const playerNames = new Map(
+        getDb()
+          .listPlayers()
+          .map((pl) => [pl.name.toLowerCase(), pl.name]),
+      );
+      playlistStats = {
+        totalTracks: p.tracks.length,
+        totalMs,
+        avgMs: p.tracks.length ? Math.round(totalMs / p.tracks.length) : 0,
+        adders: [...byAdder.entries()]
+          .map(([id, agg]) => {
+            const name = id === "unknown" ? "unknown" : (names.get(id) ?? id);
+            return {
+              name,
+              player: playerNames.get(name.toLowerCase()) ?? null,
+              songs: agg.songs,
+              totalMs: agg.totalMs,
+              avgMs: Math.round(agg.totalMs / agg.songs),
+            };
+          })
+          .sort((a, b) => b.songs - a.songs || a.name.localeCompare(b.name)),
+      };
+    } catch (err) {
+      if (!(err instanceof SpotifyError)) throw err;
+      // Not connected — spins-only stats.
+    }
+    return { ...base, playlistStats };
+  });
+
+  // The "why isn't it working" panel: connection, devices, playlist.
+  app.get("/api/admin/overview", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    return buildOverview();
+  });
+
+  app.post("/api/admin/playlist/refresh", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    clearPlaylistCache();
+    return buildOverview();
+  });
+
+  app.post("/api/admin/spins/:id/undo", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const id = Number((req.params as { id: string }).id);
+    if (!Number.isInteger(id) || id <= 0) {
+      reply.code(400).send({ error: "bad_spin_id" });
+      return;
+    }
+    const undone = getDb().undoSpin(id);
+    if (!undone) {
+      reply.code(404).send({ error: "spin_not_found_or_already_undone" });
+      return;
+    }
+    return { undone };
   });
 
   app.get("/api/admin/spins", async (req, reply) => {

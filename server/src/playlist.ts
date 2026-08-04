@@ -8,6 +8,7 @@ export type Track = {
   album: string;
   albumArt: string | null;
   durationMs: number;
+  addedBy: string | null; // Spotify user id of whoever added it
 };
 
 type SpotifyImage = { url: string; width: number | null; height: number | null };
@@ -20,11 +21,14 @@ type SpotifyTrack = {
   album: SpotifyAlbum;
   duration_ms: number;
 };
-type PlaylistItem = { track: SpotifyTrack | null };
+type PlaylistItem = {
+  track: SpotifyTrack | null;
+  added_by: { id: string } | null;
+};
 type PlaylistPage = { items: PlaylistItem[]; next: string | null };
 type PlaylistHead = { snapshot_id: string; name: string; tracks: { total: number } };
 
-let cache: { snapshotId: string; tracks: Track[] } | null = null;
+let cache: { snapshotId: string; name: string; tracks: Track[] } | null = null;
 
 function playlistId(): string {
   const id = process.env.PLAYLIST_ID;
@@ -42,7 +46,8 @@ function pickArt(images: SpotifyImage[]): string | null {
   return (mid ?? sorted[0]).url;
 }
 
-function mapTrack(t: SpotifyTrack): Track | null {
+function mapTrack(item: PlaylistItem): Track | null {
+  const t = item.track;
   if (!t?.id) return null;
   return {
     id: t.id,
@@ -51,6 +56,7 @@ function mapTrack(t: SpotifyTrack): Track | null {
     album: t.album.name,
     albumArt: pickArt(t.album.images),
     durationMs: t.duration_ms,
+    addedBy: item.added_by?.id ?? null,
   };
 }
 
@@ -67,7 +73,7 @@ async function fetchHead(): Promise<PlaylistHead> {
 async function fetchAllTracks(): Promise<Track[]> {
   const tracks: Track[] = [];
   const fields =
-    "items(track(id,name,artists(name),album(name,images),duration_ms)),next";
+    "items(added_by.id,track(id,name,artists(name),album(name,images),duration_ms)),next";
   let url = `/playlists/${playlistId()}/tracks?limit=50&fields=${encodeURIComponent(fields)}`;
   // Spotify caps at 50 per page; loop `next` until null.
   while (url) {
@@ -77,7 +83,7 @@ async function fetchAllTracks(): Promise<Track[]> {
     }
     const page = (await r.json()) as PlaylistPage;
     for (const item of page.items) {
-      const mapped = item.track && mapTrack(item.track);
+      const mapped = mapTrack(item);
       if (mapped) tracks.push(mapped);
     }
     url = page.next ?? "";
@@ -92,6 +98,7 @@ async function fetchAllTracks(): Promise<Track[]> {
  */
 export async function getPlaylist(): Promise<{
   snapshotId: string;
+  name: string;
   tracks: Track[];
 }> {
   const head = await fetchHead();
@@ -99,7 +106,7 @@ export async function getPlaylist(): Promise<{
     return cache;
   }
   const tracks = await fetchAllTracks();
-  cache = { snapshotId: head.snapshot_id, tracks };
+  cache = { snapshotId: head.snapshot_id, name: head.name, tracks };
   const db = getDb();
   if (db.getSnapshotId() !== head.snapshot_id) {
     db.pruneHeard(new Set(tracks.map((t) => t.id)));
@@ -110,4 +117,30 @@ export async function getPlaylist(): Promise<{
 
 export function clearPlaylistCache(): void {
   cache = null;
+}
+
+// ---- Spotify user id → display name, cached for the process lifetime ----
+
+const userNames = new Map<string, string>();
+
+export async function resolveUserNames(
+  ids: readonly string[],
+): Promise<Map<string, string>> {
+  const missing = ids.filter((id) => !userNames.has(id));
+  await Promise.all(
+    missing.map(async (id) => {
+      try {
+        const r = await spotifyFetch(`/users/${encodeURIComponent(id)}`);
+        if (r.ok) {
+          const j = (await r.json()) as { display_name?: string | null };
+          userNames.set(id, j.display_name || id);
+        } else {
+          userNames.set(id, id);
+        }
+      } catch {
+        userNames.set(id, id);
+      }
+    }),
+  );
+  return userNames;
 }

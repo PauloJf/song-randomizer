@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { adminApi, type AdminPlayer, type AdminSpin } from "../api";
+import {
+  adminApi,
+  type AdminOverview,
+  type AdminPlayer,
+  type AdminSpin,
+  type AdminStats,
+} from "../api";
 
 type Gate =
   | { kind: "loading" }
@@ -7,21 +13,36 @@ type Gate =
   | { kind: "login"; error?: string }
   | { kind: "in" };
 
+function fmtDur(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export default function AdminApp() {
   const [gate, setGate] = useState<Gate>({ kind: "loading" });
   const [players, setPlayers] = useState<AdminPlayer[]>([]);
   const [spins, setSpins] = useState<AdminSpin[]>([]);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [logPlayer, setLogPlayer] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async (forPlayer: string) => {
-    const [p, s] = await Promise.all([
+    const [p, s, st, ov] = await Promise.all([
       adminApi.players(),
       adminApi.spins(forPlayer || undefined),
+      adminApi.stats(),
+      adminApi.overview(),
     ]);
     setPlayers(p.players);
     setSpins(s.spins);
+    setStats(st);
+    setOverview(ov);
   }, []);
 
   useEffect(() => {
@@ -137,6 +158,68 @@ export default function AdminApp() {
       {notice && <p className="admin-notice">{notice}</p>}
 
       <section className="admin-section">
+        <h2>Status</h2>
+        {overview ? (
+          <>
+            <p className="admin-status-line">
+              Spotify:{" "}
+              {overview.connected ? (
+                <span className="ok">connected</span>
+              ) : (
+                <span className="bad">not connected</span>
+              )}
+            </p>
+            <p className="admin-status-line">
+              Playlist:{" "}
+              {overview.playlist ? (
+                <>
+                  <strong>{overview.playlist.name}</strong> ·{" "}
+                  {overview.playlist.tracks} tracks
+                </>
+              ) : (
+                <span className="bad">
+                  {overview.playlistError ?? "unavailable"}
+                </span>
+              )}
+              <button
+                className="btn small admin-refresh"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    setOverview(await adminApi.refreshPlaylist());
+                  }, "Playlist cache refreshed")
+                }
+              >
+                Refresh
+              </button>
+            </p>
+            <p className="admin-status-line">
+              Devices:{" "}
+              {overview.devices == null ? (
+                <span className="dim">unavailable</span>
+              ) : overview.devices.length === 0 ? (
+                <span className="dim">
+                  none — open Spotify and play anything once
+                </span>
+              ) : (
+                overview.devices.map((d) => (
+                  <span
+                    key={d.id}
+                    className={`device${d.is_active ? " active" : ""}`}
+                  >
+                    {d.name}
+                    {d.is_active ? " ▶" : ""}
+                  </span>
+                ))
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="dim">Loading…</p>
+        )}
+      </section>
+
+      <section className="admin-section">
         <h2>Players</h2>
         <table className="admin-table">
           <thead>
@@ -229,6 +312,105 @@ export default function AdminApp() {
       </section>
 
       <section className="admin-section">
+        <h2>Playlist</h2>
+        {stats?.playlistStats ? (
+          <>
+            <p className="admin-status-line">
+              <strong>{stats.playlistStats.totalTracks}</strong> songs ·{" "}
+              {fmtDur(stats.playlistStats.totalMs)} total ·{" "}
+              {fmtDur(stats.playlistStats.avgMs)} average
+            </p>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Added by</th>
+                  <th className="num">Songs</th>
+                  <th className="num">Total</th>
+                  <th className="num">Avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.playlistStats.adders.map((a) => (
+                  <tr key={a.name}>
+                    <td>
+                      {a.name}
+                      {a.player && <span className="player-tag">player</span>}
+                    </td>
+                    <td className="num">{a.songs}</td>
+                    <td className="num">{fmtDur(a.totalMs)}</td>
+                    <td className="num">{fmtDur(a.avgMs)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <p className="dim">Unavailable until Spotify is connected.</p>
+        )}
+      </section>
+
+      <section className="admin-section">
+        <h2>Stats</h2>
+        {!stats || stats.totalSpins === 0 ? (
+          <p className="dim">No spins yet.</p>
+        ) : (
+          <>
+            <p className="admin-status-line">
+              Total spins: <strong>{stats.totalSpins}</strong>
+            </p>
+            <div className="admin-stats-grid">
+              <div>
+                <h3>Per player</h3>
+                <table className="admin-table">
+                  <tbody>
+                    {stats.perPlayer.map((r) => (
+                      <tr key={r.player}>
+                        <td>{r.player}</td>
+                        <td className="num">{r.spins}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3>Top artists</h3>
+                <table className="admin-table">
+                  <tbody>
+                    {stats.topArtists.map((r) => (
+                      <tr key={r.artist}>
+                        <td>{r.artist}</td>
+                        <td className="num">{r.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {stats.topTracks.length > 0 && (
+                <div>
+                  <h3>Top tracks</h3>
+                  <table className="admin-table">
+                    <tbody>
+                      {stats.topTracks.map((r, i) => (
+                        <tr key={`${r.trackName}-${i}`}>
+                          <td>
+                            {r.trackName}
+                            {r.artist ? (
+                              <span className="dim"> — {r.artist}</span>
+                            ) : null}
+                          </td>
+                          <td className="num">{r.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="admin-section">
         <h2>Spin log</h2>
         <div className="admin-log-filter">
           <select
@@ -252,6 +434,7 @@ export default function AdminApp() {
                 <th>When</th>
                 <th>Player</th>
                 <th>Track</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -265,6 +448,22 @@ export default function AdminApp() {
                     {s.trackName ?? s.trackId}
                     {s.artist ? <span className="dim"> — {s.artist}</span> : null}
                     {s.undone ? <span className="undone-tag"> undone</span> : null}
+                  </td>
+                  <td className="admin-row-actions">
+                    {!s.undone && (
+                      <button
+                        className="btn small"
+                        disabled={busy}
+                        onClick={() =>
+                          run(
+                            () => adminApi.undoSpin(s.id),
+                            `Undid ${s.player}'s spin`,
+                          )
+                        }
+                      >
+                        Undo
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

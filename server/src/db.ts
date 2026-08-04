@@ -237,12 +237,30 @@ export class Db {
         )
         .get() as { id: number; player: string; trackId: string; at: string } | undefined;
       if (!last) return null;
-      this.db.prepare("UPDATE spins SET undone = 1 WHERE id = ?").run(last.id);
-      this.db
-        .prepare("DELETE FROM heard WHERE player = ? AND track_id = ?")
-        .run(last.player, last.trackId);
+      this.markUndone(last.id, last.player, last.trackId);
       return { player: last.player, trackId: last.trackId, at: last.at };
     });
+  }
+
+  /** Undo one specific spin by id (admin log row). Returns it, or null. */
+  undoSpin(id: number): { player: string; trackId: string; at: string } | null {
+    return this.transaction(() => {
+      const spin = this.db
+        .prepare(
+          "SELECT id, player, track_id AS trackId, at FROM spins WHERE id = ? AND undone = 0",
+        )
+        .get(id) as { id: number; player: string; trackId: string; at: string } | undefined;
+      if (!spin) return null;
+      this.markUndone(spin.id, spin.player, spin.trackId);
+      return { player: spin.player, trackId: spin.trackId, at: spin.at };
+    });
+  }
+
+  private markUndone(id: number, player: string, trackId: string): void {
+    this.db.prepare("UPDATE spins SET undone = 1 WHERE id = ?").run(id);
+    this.db
+      .prepare("DELETE FROM heard WHERE player = ? AND track_id = ?")
+      .run(player, trackId);
   }
 
   /** Clear heard history. The spins log is preserved (it's the admin trail). */
@@ -265,6 +283,39 @@ export class Db {
       const del = this.db.prepare("DELETE FROM heard WHERE track_id = ?");
       for (const id of stale) del.run(id);
     });
+  }
+
+  /** Aggregates for the admin stats section. Undone spins don't count. */
+  stats(): {
+    totalSpins: number;
+    perPlayer: { player: string; spins: number }[];
+    topArtists: { artist: string; count: number }[];
+    topTracks: { trackName: string; artist: string | null; count: number }[];
+  } {
+    const total = this.db
+      .prepare("SELECT COUNT(*) AS n FROM spins WHERE undone = 0")
+      .get() as { n: number };
+    const perPlayer = this.db
+      .prepare(
+        `SELECT player, COUNT(*) AS spins FROM spins
+         WHERE undone = 0 GROUP BY player ORDER BY spins DESC, player`,
+      )
+      .all() as { player: string; spins: number }[];
+    const topArtists = this.db
+      .prepare(
+        `SELECT artist, COUNT(*) AS count FROM spins
+         WHERE undone = 0 AND artist IS NOT NULL
+         GROUP BY artist ORDER BY count DESC, artist LIMIT 5`,
+      )
+      .all() as { artist: string; count: number }[];
+    const topTracks = this.db
+      .prepare(
+        `SELECT track_name AS trackName, artist, COUNT(*) AS count FROM spins
+         WHERE undone = 0 AND track_name IS NOT NULL
+         GROUP BY track_id ORDER BY count DESC, trackName LIMIT 5`,
+      )
+      .all() as { trackName: string; artist: string | null; count: number }[];
+    return { totalSpins: total.n, perPlayer, topArtists, topTracks };
   }
 
   spinLog(player?: string): SpinRow[] {

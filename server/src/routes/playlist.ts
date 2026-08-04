@@ -7,8 +7,8 @@ export async function registerPlaylistRoutes(app: FastifyInstance) {
   app.get("/api/playlist", async (req, reply) => {
     if (!requireApp(req, reply)) return;
     try {
-      const { snapshotId, tracks } = await getPlaylist();
-      return { snapshotId, tracks };
+      const { snapshotId, name, tracks } = await getPlaylist();
+      return { snapshotId, name, tracks };
     } catch (err) {
       if (err instanceof SpotifyError) {
         reply.code(err.status === 401 ? 428 : 502).send({

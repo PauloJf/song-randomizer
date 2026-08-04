@@ -100,6 +100,27 @@ describe("spin lifecycle", () => {
     expect(db.undoLastSpin()).toBeNull();
   });
 
+  it("undoSpin undoes a specific row, not just the last", () => {
+    db.recordSpin("Alice", { id: "t1", name: "S1", artist: "A" });
+    db.recordSpin("Alice", { id: "t2", name: "S2", artist: "A" });
+    const first = db.spinLog("Alice").find((s) => s.trackId === "t1")!;
+    expect(db.undoSpin(first.id)).toMatchObject({ player: "Alice", trackId: "t1" });
+    expect(db.getHeard("Alice")).toEqual(["t2"]);
+    // Undoing the same row again is a no-op.
+    expect(db.undoSpin(first.id)).toBeNull();
+  });
+
+  it("stats aggregates exclude undone spins", () => {
+    db.recordSpin("Alice", { id: "t1", name: "S1", artist: "Artist X" });
+    db.recordSpin("Alice", { id: "t2", name: "S2", artist: "Artist X" });
+    db.recordSpin("Bob", { id: "t3", name: "S3", artist: "Artist Y" });
+    db.undoLastSpin(); // removes Bob's
+    const s = db.stats();
+    expect(s.totalSpins).toBe(2);
+    expect(s.perPlayer).toEqual([{ player: "Alice", spins: 2 }]);
+    expect(s.topArtists).toEqual([{ artist: "Artist X", count: 2 }]);
+  });
+
   it("reset clears heard but preserves the spin log", () => {
     db.recordSpin("Alice", { id: "t1", name: "S1", artist: "A" });
     db.recordSpin("Alice", { id: "t2", name: "S2", artist: "A" });
