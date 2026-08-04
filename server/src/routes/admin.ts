@@ -3,8 +3,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getDb } from "../db.js";
 import { getPlaylist } from "../playlist.js";
 import { SpotifyError } from "../spotify.js";
+import { attemptDelay, clearAttempts } from "../ratelimit.js";
 
 const COOKIE_NAME = "admin";
+// The scope prefix is part of the signed value. Without it, the `app` and
+// `admin` cookies would be interchangeable (same secret, same shape) and a
+// party guest could replay their app cookie under the admin name.
+const SCOPE = "admin:";
 const SESSION_MS = 12 * 60 * 60 * 1000; // 12h — covers a party and then some
 
 function adminPassword(): string | null {
@@ -31,7 +36,8 @@ export function isAdmin(req: FastifyRequest): boolean {
   if (!raw) return false;
   const unsigned = req.unsignCookie(raw);
   if (!unsigned.valid || !unsigned.value) return false;
-  const exp = Number(unsigned.value);
+  if (!unsigned.value.startsWith(SCOPE)) return false;
+  const exp = Number(unsigned.value.slice(SCOPE.length));
   return Number.isFinite(exp) && exp > Date.now();
 }
 
@@ -57,13 +63,20 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       reply.code(503).send({ error: "admin_disabled" });
       return;
     }
+    const rateKey = `admin:${req.ip}`;
+    const wait = attemptDelay(rateKey);
+    if (wait > 0) {
+      reply.code(429).send({ error: "too_many_attempts", retryAfterSeconds: wait });
+      return;
+    }
     const body = (req.body ?? {}) as { password?: unknown };
     if (typeof body.password !== "string" || !passwordMatches(body.password)) {
       reply.code(401).send({ error: "wrong_password" });
       return;
     }
+    clearAttempts(rateKey);
     const expires = Date.now() + SESSION_MS;
-    reply.setCookie(COOKIE_NAME, String(expires), {
+    reply.setCookie(COOKIE_NAME, `${SCOPE}${expires}`, {
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure(),
@@ -97,6 +110,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       reply.code(400).send({ error: "name_required" });
       return;
     }
+    if (name.length > 40) {
+      reply.code(400).send({ error: "name_too_long", max: 40 });
+      return;
+    }
     const db = getDb();
     if (db.hasPlayer(name)) {
       reply.code(409).send({ error: "player_exists" });
@@ -118,6 +135,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     }
     if (!to) {
       reply.code(400).send({ error: "name_required" });
+      return;
+    }
+    if (to.length > 40) {
+      reply.code(400).send({ error: "name_too_long", max: 40 });
       return;
     }
     if (db.hasPlayer(to)) {

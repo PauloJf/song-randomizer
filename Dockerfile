@@ -32,8 +32,12 @@ COPY --from=server-build /app/server/dist ./dist
 # Built frontend, served as static files by the backend.
 COPY --from=web-build /app/web/dist ./web-dist
 
-RUN mkdir -p /data
+# Run as the unprivileged node user. /data must be writable by it — named
+# volumes inherit this ownership on first use; for volumes created by older
+# (root) versions of this image, see the upgrade note in DEPLOY.md.
+RUN mkdir -p /data && chown -R node:node /data
 VOLUME ["/data"]
+USER node
 
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

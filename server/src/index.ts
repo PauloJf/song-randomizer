@@ -27,7 +27,9 @@ const staticCandidates = [
 ];
 const staticRoot = staticCandidates.find((p) => existsSync(p));
 
-const app = Fastify({ logger: true });
+// trustProxy: the app sits behind Apache in production, so req.ip must come
+// from X-Forwarded-For for the login rate limiter to see real clients.
+const app = Fastify({ logger: true, trustProxy: true });
 
 // Lenient JSON: some clients send `content-type: application/json` with an
 // empty body on POST/DELETE. Treat that as {} instead of a 400.
@@ -50,12 +52,29 @@ app.addContentTypeParser(
 
 const cookieSecret = process.env.COOKIE_SECRET;
 if (!cookieSecret || cookieSecret.length < 16) {
-  app.log.warn(
-    "COOKIE_SECRET is missing or too short (<16 chars). The PKCE cookie won't be signed strongly.",
-  );
+  // Session and PKCE cookies are only as strong as this secret. A predictable
+  // fallback in production would let anyone forge an admin session.
+  if (process.env.NODE_ENV === "production") {
+    app.log.fatal("COOKIE_SECRET is missing or too short (<16 chars). Refusing to start.");
+    process.exit(1);
+  }
+  app.log.warn("COOKIE_SECRET is missing or too short (<16 chars). Dev fallback in use.");
 }
 await app.register(fastifyCookie, {
   secret: cookieSecret ?? "dev-cookie-secret-change-me-please",
+});
+
+// Baseline security headers. The CSP allows self plus Spotify's image CDNs
+// (album art); everything else stays same-origin.
+app.addHook("onSend", async (_req, reply) => {
+  reply.header("x-content-type-options", "nosniff");
+  reply.header("x-frame-options", "DENY");
+  reply.header("referrer-policy", "no-referrer");
+  reply.header(
+    "content-security-policy",
+    "default-src 'self'; img-src 'self' https: data:; script-src 'self'; " +
+      "style-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'",
+  );
 });
 
 await registerAuthRoutes(app);
@@ -94,6 +113,15 @@ if (staticRoot) {
   app.log.warn(
     "No built frontend found. Backend running API-only. Run `npm run build` in web/ or use Vite dev server.",
   );
+}
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, async () => {
+    app.log.info({ signal }, "shutting down");
+    await app.close();
+    getDb().close();
+    process.exit(0);
+  });
 }
 
 try {

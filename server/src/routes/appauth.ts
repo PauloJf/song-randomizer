@@ -1,8 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { isAdmin } from "./admin.js";
+import { attemptDelay, clearAttempts } from "../ratelimit.js";
 
 const COOKIE_NAME = "app";
+// Scope prefix inside the signed value — see the note in admin.ts.
+const SCOPE = "app:";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — it's a party app
 
 function appPassword(): string | null {
@@ -27,7 +30,8 @@ function isAppAuthed(req: FastifyRequest): boolean {
   if (!raw) return false;
   const unsigned = req.unsignCookie(raw);
   if (!unsigned.valid || !unsigned.value) return false;
-  const exp = Number(unsigned.value);
+  if (!unsigned.value.startsWith(SCOPE)) return false;
+  const exp = Number(unsigned.value.slice(SCOPE.length));
   return Number.isFinite(exp) && exp > Date.now();
 }
 
@@ -53,13 +57,20 @@ export async function registerAppAuthRoutes(app: FastifyInstance) {
       // Nothing to log into — report success so the client just proceeds.
       return { authed: true };
     }
+    const rateKey = `app:${req.ip}`;
+    const wait = attemptDelay(rateKey);
+    if (wait > 0) {
+      reply.code(429).send({ error: "too_many_attempts", retryAfterSeconds: wait });
+      return;
+    }
     const body = (req.body ?? {}) as { password?: unknown };
     if (typeof body.password !== "string" || !passwordMatches(body.password)) {
       reply.code(401).send({ error: "wrong_password" });
       return;
     }
+    clearAttempts(rateKey);
     const expires = Date.now() + SESSION_MS;
-    reply.setCookie(COOKIE_NAME, String(expires), {
+    reply.setCookie(COOKIE_NAME, `${SCOPE}${expires}`, {
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure(),

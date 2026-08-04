@@ -79,4 +79,14 @@ git pull
 docker compose up -d --build
 ```
 
+**Upgrading from v0.3 or earlier:** the container now runs as the unprivileged
+`node` user. A `roulette-state` volume created by an older (root) image will
+be unwritable until you fix its ownership once:
+
+```bash
+docker run --rm -v roulette-state:/data alpine chown -R 1000:1000 /data
+```
+
+(Volumes created fresh by the new image need nothing.)
+
 Because state is in the volume, no re-auth is needed unless the Spotify refresh token itself has been revoked.
