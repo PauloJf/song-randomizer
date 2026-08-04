@@ -70,6 +70,12 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ trackId }),
     }),
+  queue: (trackId: string) =>
+    json<{ ok: true }>("/api/queue", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trackId }),
+    }),
 };
 
 export type AdminPlayer = { name: string; heardCount: number };
@@ -124,4 +130,38 @@ export const adminApi = {
     json<{ spins: AdminSpin[] }>(
       `/api/admin/spins${player ? `?player=${encodeURIComponent(player)}` : ""}`,
     ),
+  stats: () => json<AdminStats>("/api/admin/stats"),
+  overview: () => json<AdminOverview>("/api/admin/overview"),
+  refreshPlaylist: () =>
+    post<AdminOverview>("/api/admin/playlist/refresh"),
+  undoSpin: (id: number) =>
+    post<{ undone: { player: string; trackId: string; at: string } }>(
+      `/api/admin/spins/${id}/undo`,
+    ),
+};
+
+export type AdminOverview = {
+  connected: boolean;
+  playlist: { name: string; tracks: number; snapshotId: string } | null;
+  playlistError: string | null;
+  devices: { id: string; name: string; type: string; is_active: boolean }[] | null;
+};
+
+export type AdminStats = {
+  totalSpins: number;
+  perPlayer: { player: string; spins: number }[];
+  topArtists: { artist: string; count: number }[];
+  topTracks: { trackName: string; artist: string | null; count: number }[];
+  playlistStats: {
+    totalTracks: number;
+    totalMs: number;
+    avgMs: number;
+    adders: {
+      name: string;
+      player: string | null;
+      songs: number;
+      totalMs: number;
+      avgMs: number;
+    }[];
+  } | null;
 };

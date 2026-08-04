@@ -122,6 +122,8 @@ export default function App() {
 
   function handleWheelDone() {
     if (phase.kind !== "spinning") return;
+    // Haptic hit on landing. iOS Safari has no vibrate(); Android gets it.
+    if ("vibrate" in navigator) navigator.vibrate([40, 60, 40]);
     setPhase({ kind: "result", player: phase.player, spin: phase.spin });
     void refreshPlayers();
   }

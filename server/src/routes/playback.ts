@@ -21,6 +21,58 @@ async function safeParseError(r: Response): Promise<{ message?: string; raw: str
   }
 }
 
+async function playbackCall(
+  trackId: string,
+  fn: () => Promise<Response>,
+  reply: import("fastify").FastifyReply,
+): Promise<{ ok: true } | undefined> {
+  try {
+    const r = await fn();
+    if (r.ok || r.status === 204 || r.status === 202) {
+      return { ok: true };
+    }
+    if (r.status === 404) {
+      // No active device — surface as 409 so the client can offer the deep link.
+      const detail = await safeParseError(r);
+      reply.code(409).send({
+        error: "no_active_device",
+        reason: "no_active_device",
+        detail: detail.message,
+        deepLink: `spotify:track:${trackId}`,
+        webLink: `https://open.spotify.com/track/${trackId}`,
+      });
+      return;
+    }
+    if (r.status === 403) {
+      const detail = await safeParseError(r);
+      reply.code(403).send({
+        error: "premium_required_or_restricted",
+        detail: detail.message,
+      });
+      return;
+    }
+    if (r.status === 429) {
+      reply.code(429).send({
+        error: "rate_limited",
+        detail: r.headers.get("retry-after"),
+      });
+      return;
+    }
+    const detail = await safeParseError(r);
+    reply.code(502).send({ error: "spotify_error", status: r.status, detail: detail.message });
+    return;
+  } catch (err) {
+    if (err instanceof SpotifyError) {
+      reply.code(err.status === 401 ? 428 : 502).send({
+        error: err.status === 401 ? "not_connected" : "spotify_error",
+        detail: err.message,
+      });
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function registerPlaybackRoutes(app: FastifyInstance) {
   app.post("/api/play", async (req, reply) => {
     if (!requireApp(req, reply)) return;
@@ -29,55 +81,32 @@ export async function registerPlaybackRoutes(app: FastifyInstance) {
       reply.code(400).send({ error: "trackId_required" });
       return;
     }
-    try {
-      const r = await spotifyFetch("/me/player/play", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uris: [`spotify:track:${trackId}`] }),
-      });
-      if (r.status === 204 || r.status === 202) {
-        return { ok: true };
-      }
-      if (r.status === 404) {
-        // No active device — surface as 409 so the client can offer the deep link.
-        const detail = await safeParseError(r);
-        reply.code(409).send({
-          error: "no_active_device",
-          reason: "no_active_device",
-          detail: detail.message,
-          deepLink: `spotify:track:${trackId}`,
-          webLink: `https://open.spotify.com/track/${trackId}`,
-        });
-        return;
-      }
-      if (r.status === 403) {
-        // Premium required, restricted content, etc.
-        const detail = await safeParseError(r);
-        reply.code(403).send({
-          error: "premium_required_or_restricted",
-          detail: detail.message,
-        });
-        return;
-      }
-      if (r.status === 429) {
-        reply.code(429).send({
-          error: "rate_limited",
-          detail: r.headers.get("retry-after"),
-        });
-        return;
-      }
-      const detail = await safeParseError(r);
-      reply.code(502).send({ error: "spotify_error", status: r.status, detail: detail.message });
-    } catch (err) {
-      if (err instanceof SpotifyError) {
-        reply.code(err.status === 401 ? 428 : 502).send({
-          error: err.status === 401 ? "not_connected" : "spotify_error",
-          detail: err.message,
-        });
-        return;
-      }
-      throw err;
+    return playbackCall(
+      trackId,
+      () =>
+        spotifyFetch("/me/player/play", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ uris: [`spotify:track:${trackId}`] }),
+        }),
+      reply,
+    );
+  });
+
+  // Append to the queue instead of interrupting whatever is playing.
+  app.post("/api/queue", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
+    const trackId = trackIdFrom(req.body);
+    if (!trackId) {
+      reply.code(400).send({ error: "trackId_required" });
+      return;
     }
+    const uri = encodeURIComponent(`spotify:track:${trackId}`);
+    return playbackCall(
+      trackId,
+      () => spotifyFetch(`/me/player/queue?uri=${uri}`, { method: "POST" }),
+      reply,
+    );
   });
 
   app.get("/api/devices", async (req, reply) => {
