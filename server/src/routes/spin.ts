@@ -4,6 +4,7 @@ import { SpotifyError } from "../spotify.js";
 import { getDb } from "../db.js";
 import { buildWheelOrder, pickTrackId } from "../spin.js";
 import { isAdmin } from "./admin.js";
+import { requireApp } from "./appauth.js";
 
 type SpinBody = { player?: unknown };
 
@@ -16,6 +17,7 @@ function playerName(b: unknown): string | null {
 
 export async function registerSpinRoutes(app: FastifyInstance) {
   app.post("/api/spin", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     const player = playerName(req.body);
     if (!player) {
       reply.code(400).send({ error: "player_required" });
@@ -59,7 +61,8 @@ export async function registerSpinRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/api/spin/undo", async (_req, reply) => {
+  app.post("/api/spin/undo", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     const undone = getDb().undoLastSpin();
     if (!undone) {
       reply.code(404).send({ error: "no_spins_to_undo" });
@@ -69,10 +72,14 @@ export async function registerSpinRoutes(app: FastifyInstance) {
   });
 
   // Reset requires the admin session when ADMIN_PASSWORD is configured;
-  // on installs without one it stays open (nothing to authenticate against).
+  // otherwise it falls back to the app gate (open when neither is set).
   app.post("/api/reset", async (req, reply) => {
-    if (process.env.ADMIN_PASSWORD && !isAdmin(req)) {
-      reply.code(401).send({ error: "admin_required" });
+    if (process.env.ADMIN_PASSWORD) {
+      if (!isAdmin(req)) {
+        reply.code(401).send({ error: "admin_required" });
+        return;
+      }
+    } else if (!requireApp(req, reply)) {
       return;
     }
     const body = (req.body ?? {}) as { player?: unknown };

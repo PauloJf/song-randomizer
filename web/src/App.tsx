@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type PlayerSummary, type SpinResult, type Track } from "./api";
+import { api, appAuth, type PlayerSummary, type SpinResult, type Track } from "./api";
 import { Ticker } from "./audio/ticker";
 import { Connect } from "./components/Connect";
 import { PlayerPicker } from "./components/PlayerPicker";
@@ -8,6 +8,7 @@ import { ResultCard } from "./components/ResultCard";
 
 type Phase =
   | { kind: "boot" }
+  | { kind: "locked"; error?: string }
   | { kind: "disconnected" }
   | { kind: "error"; message: string }
   | { kind: "idle" }
@@ -32,6 +33,11 @@ export default function App() {
   async function loadAll() {
     setPhase({ kind: "boot" });
     try {
+      const gate = await appAuth.status();
+      if (gate.locked && !gate.authed) {
+        setPhase({ kind: "locked" });
+        return;
+      }
       const status = await api.authStatus();
       if (!status.connected) {
         setPhase({ kind: "disconnected" });
@@ -49,12 +55,33 @@ export default function App() {
       }
       setPhase({ kind: "idle" });
     } catch (e) {
-      const err = e as Error & { status?: number };
-      if (err.status === 428) {
+      const err = e as Error & { status?: number; body?: { error?: string } };
+      if (err.status === 401 && err.body?.error === "app_password_required") {
+        setPhase({ kind: "locked" });
+      } else if (err.status === 428) {
         setPhase({ kind: "disconnected" });
       } else {
         setPhase({ kind: "error", message: err.message ?? String(e) });
       }
+    }
+  }
+
+  async function handleUnlock(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const password = new FormData(e.currentTarget).get("password");
+    if (typeof password !== "string" || !password) return;
+    setBusy(true);
+    try {
+      await appAuth.login(password);
+      await loadAll();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setPhase({
+        kind: "locked",
+        error: status === 401 ? "Wrong password." : "Login failed.",
+      });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -137,8 +164,27 @@ export default function App() {
     <main className="app">
       <header className="app-header">
         <h1>Spotify Roulette</h1>
+        <a className="admin-link" href="/admin">
+          Admin
+        </a>
       </header>
       {phase.kind === "boot" && <p className="dim">Loading…</p>}
+      {phase.kind === "locked" && (
+        <form className="admin-login" onSubmit={handleUnlock}>
+          <p className="dim">This wheel is password-protected.</p>
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            autoFocus
+            autoComplete="current-password"
+          />
+          <button className="btn primary" disabled={busy}>
+            Enter
+          </button>
+          {phase.error && <p className="err">{phase.error}</p>}
+        </form>
+      )}
       {phase.kind === "disconnected" && <Connect />}
       {phase.kind === "error" && (
         <div className="error">

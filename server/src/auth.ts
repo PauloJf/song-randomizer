@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { exchangeCode, isConnected, redirectUri } from "./spotify.js";
 import { getDb } from "./db.js";
+import { requireApp } from "./routes/appauth.js";
 
 const SCOPES = [
   "playlist-read-private",
@@ -36,7 +37,11 @@ function isSecure(): boolean {
 }
 
 export async function registerAuthRoutes(app: FastifyInstance) {
+  // Gated: otherwise anyone who finds the URL could re-link the app to
+  // their own Spotify account. (The callback stays open — Spotify calls it —
+  // but it's useless without the signed PKCE cookie this route sets.)
   app.get("/api/auth/login", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     const verifier = makeVerifier();
     const state = base64url(randomBytes(16));
     const payload = JSON.stringify({ v: verifier, s: state });

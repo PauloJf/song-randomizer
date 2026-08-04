@@ -14,6 +14,7 @@ services:
       PORT: ${PORT:-3000}
       COOKIE_SECRET: ${COOKIE_SECRET}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      APP_PASSWORD: ${APP_PASSWORD:-}
       STATE_DIR: /data
       NODE_ENV: production
     volumes:

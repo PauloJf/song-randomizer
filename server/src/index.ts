@@ -10,6 +10,7 @@ import { registerPlayersRoutes } from "./routes/players.js";
 import { registerSpinRoutes } from "./routes/spin.js";
 import { registerPlaybackRoutes } from "./routes/playback.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerAppAuthRoutes } from "./routes/appauth.js";
 import { getDb } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +64,7 @@ await registerPlayersRoutes(app);
 await registerSpinRoutes(app);
 await registerPlaybackRoutes(app);
 await registerAdminRoutes(app);
+await registerAppAuthRoutes(app);
 
 // Open the database on boot so schema creation and the one-time state.json
 // import run before the first request.

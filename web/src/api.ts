@@ -91,6 +91,16 @@ function post<T>(url: string, body?: unknown): Promise<T> {
   });
 }
 
+export const appAuth = {
+  status: () => json<{ locked: boolean; authed: boolean }>("/api/app/status"),
+  login: (password: string) =>
+    json<{ authed: true }>("/api/app/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    }),
+};
+
 export const adminApi = {
   status: () => json<{ enabled: boolean; admin: boolean }>("/api/admin/status"),
   login: (password: string) => post<{ admin: true }>("/api/admin/login", { password }),

@@ -25,6 +25,7 @@ BASE_URL=https://<your-domain>
 PORT=3000
 COOKIE_SECRET=<any random string ≥ 32 chars>
 ADMIN_PASSWORD=<password for the /admin panel; leave empty to disable>
+APP_PASSWORD=<password for the wheel itself; leave empty to keep it open>
 ```
 
 ## 3. Bring it up

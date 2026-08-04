@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { SpotifyError, spotifyFetch } from "../spotify.js";
+import { requireApp } from "./appauth.js";
 
 type PlayBody = { trackId?: unknown };
 
@@ -22,6 +23,7 @@ async function safeParseError(r: Response): Promise<{ message?: string; raw: str
 
 export async function registerPlaybackRoutes(app: FastifyInstance) {
   app.post("/api/play", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     const trackId = trackIdFrom(req.body);
     if (!trackId) {
       reply.code(400).send({ error: "trackId_required" });
@@ -78,7 +80,8 @@ export async function registerPlaybackRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get("/api/devices", async (_req, reply) => {
+  app.get("/api/devices", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     try {
       const r = await spotifyFetch("/me/player/devices");
       if (!r.ok) {

@@ -60,6 +60,7 @@ docker run -d --name spotify-roulette \
 | `PORT` | no | Defaults to `3000` |
 | `COOKIE_SECRET` | yes | Random 32+ char string, signs the PKCE cookie |
 | `ADMIN_PASSWORD` | no | Enables the `/admin` panel (player management, resets, spin logs). Empty = admin disabled, resets open |
+| `APP_PASSWORD` | no | Password-protects the wheel itself (30-day session cookie). Empty = open |
 
 ## First run
 

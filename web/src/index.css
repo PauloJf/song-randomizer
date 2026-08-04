@@ -44,7 +44,25 @@ body {
 }
 
 .app-header {
+  position: relative;
   text-align: center;
+}
+
+.admin-link {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+}
+
+.admin-link:active {
+  background: var(--panel-2);
 }
 
 .app-header h1 {

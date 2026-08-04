@@ -2,9 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { getDb } from "../db.js";
 import { getPlaylist } from "../playlist.js";
 import { SpotifyError } from "../spotify.js";
+import { requireApp } from "./appauth.js";
 
 export async function registerPlayersRoutes(app: FastifyInstance) {
-  app.get("/api/players", async () => {
+  app.get("/api/players", async (req, reply) => {
+    if (!requireApp(req, reply)) return;
     let total: number | null = null;
     try {
       const p = await getPlaylist();
