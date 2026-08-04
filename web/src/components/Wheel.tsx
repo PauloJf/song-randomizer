@@ -2,12 +2,15 @@ import { useEffect, useRef } from "react";
 import type { Track } from "../api";
 import { Ticker } from "../audio/ticker";
 
-const DURATION_MS = 5000; // total spin time
+const DURATION_MS = 6500; // total spin time
 const EXTRA_LOOPS = 2; // full-strip loops before landing, adds momentum
 
-function easeOutCubic(t: number): number {
+// Quintic ease-out: same fast start as the old cubic, but a much longer
+// tail — the final cover spends the last ~2.5s creeping into the frame
+// before it locks, which is where the suspense lives.
+function easeOutQuint(t: number): number {
   const inv = 1 - t;
-  return 1 - inv * inv * inv;
+  return 1 - inv * inv * inv * inv * inv;
 }
 
 export function Wheel({
@@ -47,7 +50,7 @@ export function Wheel({
 
     const step = (now: number) => {
       const t = Math.min(1, (now - startTime) / DURATION_MS);
-      const eased = easeOutCubic(t);
+      const eased = easeOutQuint(t);
       const offset = eased * totalDistance;
       const strip = stripRef.current;
       if (strip) strip.style.transform = `translateY(${-offset}px)`;
@@ -62,6 +65,7 @@ export function Wheel({
         raf = requestAnimationFrame(step);
       } else if (!doneRef.current) {
         doneRef.current = true;
+        ticker.land();
         onDone();
       }
     };
