@@ -9,6 +9,9 @@
   --panel-2: #1e1e22;
   --border: #2a2a2f;
   --dim: #9aa0a6;
+  /* Shared by the wheel tiles and the result card art, so the spinning
+     cover is exactly as big as the one it lands on. */
+  --cover-size: min(60vw, 16rem);
 }
 
 * {
@@ -179,8 +182,8 @@ body {
 
 .wheel-viewport {
   position: relative;
-  width: min(90vw, 22rem);
-  height: 128px; /* one tile tall */
+  width: var(--cover-size);
+  height: var(--cover-size); /* one tile tall */
   overflow: hidden;
   border-radius: 1rem;
   background: var(--panel);
@@ -224,7 +227,7 @@ body {
 
 .wheel-tile {
   width: 100%;
-  height: 128px;
+  height: var(--cover-size);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -232,15 +235,15 @@ body {
 }
 
 .wheel-tile img {
-  width: 128px;
-  height: 128px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }
 
 .wheel-tile-placeholder {
-  width: 128px;
-  height: 128px;
+  width: 100%;
+  height: 100%;
   background: var(--panel-2);
   display: flex;
   align-items: center;
@@ -273,7 +276,7 @@ body {
 }
 
 .result-art {
-  width: min(60vw, 16rem);
+  width: var(--cover-size);
   aspect-ratio: 1;
   margin: 0.25rem 0 0.75rem;
   border-radius: 0.75rem;

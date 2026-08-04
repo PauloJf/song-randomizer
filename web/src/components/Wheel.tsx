@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react";
 import type { Track } from "../api";
 import { Ticker } from "../audio/ticker";
 
-const TILE_HEIGHT = 128; // px, must match .wheel-tile in CSS
 const DURATION_MS = 5000; // total spin time
-const EXTRA_LOOPS = 4; // full-strip loops before landing, adds momentum
+const EXTRA_LOOPS = 2; // full-strip loops before landing, adds momentum
 
 function easeOutCubic(t: number): number {
   const inv = 1 - t;
@@ -31,16 +30,16 @@ export function Wheel({
     if (!stripRef.current) return;
     doneRef.current = false;
     const startTime = performance.now();
-    // Final Y translation: put winner in the center of the viewport.
-    // Container is TILE_HEIGHT tall; strip's top starts flush with container's
-    // top; we translate up by winnerIndex * TILE_HEIGHT so that tile is aligned
-    // with the top… then we want it centered. Container's centerline is at
-    // TILE_HEIGHT / 2, tile's center is at (winnerIndex + 0.5) * TILE_HEIGHT.
-    // Translation needed: -(winnerIndex * TILE_HEIGHT).
-    const finalOffset = winnerIndex * TILE_HEIGHT;
-    // Add EXTRA_LOOPS full traversals of the (order.length * TILE_HEIGHT) strip
-    // so the deceleration feels weighty.
-    const loopDistance = order.length * TILE_HEIGHT;
+    // Tile height is whatever CSS resolved --cover-size to; measuring the
+    // rendered tile keeps the animation math and the stylesheet in lockstep.
+    const tileHeight =
+      stripRef.current.firstElementChild?.getBoundingClientRect().height || 256;
+    // Final Y translation: the viewport is one tile tall, so translating up by
+    // winnerIndex * tileHeight leaves the winner tile filling the viewport.
+    const finalOffset = winnerIndex * tileHeight;
+    // Add EXTRA_LOOPS full traversals of the strip so the deceleration feels
+    // weighty.
+    const loopDistance = order.length * tileHeight;
     const totalDistance = EXTRA_LOOPS * loopDistance + finalOffset;
 
     let lastTileIndex = -1;
@@ -54,7 +53,7 @@ export function Wheel({
       if (strip) strip.style.transform = `translateY(${-offset}px)`;
 
       // Tick when a new tile crosses the center line.
-      const currentTile = Math.floor(offset / TILE_HEIGHT);
+      const currentTile = Math.floor(offset / tileHeight);
       if (currentTile !== lastTileIndex) {
         lastTileIndex = currentTile;
         ticker.tick();
