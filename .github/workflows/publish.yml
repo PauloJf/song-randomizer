@@ -1,9 +1,11 @@
 name: publish
 
 # Fires on every version tag push (e.g. `v0.1`, `v0.1.0`, `v1.2.3-rc1`).
-# Requires two repo secrets:
+# Requires three repo secrets:
 #   DOCKERHUB_USERNAME — the Docker Hub account that owns the image
 #   DOCKERHUB_TOKEN    — an access token from that account with read/write scope
+#   DOCKERHUB_PASSWORD — the account password (README sync only; the
+#                        description API rejects access tokens)
 on:
   push:
     tags:
@@ -50,11 +52,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Docker Hub's description API rejects access tokens (403) — this one
+      # step needs the real account password, hence the separate secret.
       - name: Sync README to Docker Hub
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
           repository: ${{ secrets.DOCKERHUB_USERNAME }}/song-randomizer
           short-description: "Spotify playlist roulette — one shared queue, no repeats."
           readme-filepath: ./README.md
