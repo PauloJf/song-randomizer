@@ -30,7 +30,19 @@ export class Db {
     mkdirSync(dir, { recursive: true });
     const file = path.join(dir, "roulette.db");
     const fresh = !existsSync(file);
-    this.db = new DatabaseSync(file);
+    try {
+      this.db = new DatabaseSync(file);
+    } catch (err) {
+      // The classic cause: a /data volume created by a pre-v0.4 (root) image,
+      // while the container now runs as the unprivileged node user.
+      throw new Error(
+        `Cannot open ${file} — if this is a Docker volume created by an older ` +
+          `image, fix ownership once with: ` +
+          `docker run --rm -v <volume-name>:/data alpine chown -R 1000:1000 /data ` +
+          `(original error: ${(err as Error).message})`,
+        { cause: err },
+      );
+    }
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS meta (
@@ -142,6 +154,26 @@ export class Db {
         "INSERT INTO meta (key, value) VALUES ('tokens', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
       )
       .run(JSON.stringify(tokens));
+  }
+
+  /** Admin-chosen playlist override; PLAYLIST_ID env is the default. */
+  getPlaylistId(): string | null {
+    const row = this.db
+      .prepare("SELECT value FROM meta WHERE key = 'playlistId'")
+      .get() as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  setPlaylistId(id: string | null): void {
+    if (id === null) {
+      this.db.prepare("DELETE FROM meta WHERE key = 'playlistId'").run();
+      return;
+    }
+    this.db
+      .prepare(
+        "INSERT INTO meta (key, value) VALUES ('playlistId', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run(id);
   }
 
   getSnapshotId(): string | null {

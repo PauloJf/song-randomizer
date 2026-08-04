@@ -28,9 +28,16 @@ type PlaylistItem = {
 type PlaylistPage = { items: PlaylistItem[]; next: string | null };
 type PlaylistHead = { snapshot_id: string; name: string; tracks: { total: number } };
 
-let cache: { snapshotId: string; name: string; tracks: Track[] } | null = null;
+let cache: {
+  playlistId: string;
+  snapshotId: string;
+  name: string;
+  tracks: Track[];
+} | null = null;
 
-function playlistId(): string {
+export function playlistId(): string {
+  const override = getDb().getPlaylistId();
+  if (override) return override;
   const id = process.env.PLAYLIST_ID;
   if (!id) throw new Error("PLAYLIST_ID is not set");
   return id;
@@ -101,12 +108,13 @@ export async function getPlaylist(): Promise<{
   name: string;
   tracks: Track[];
 }> {
+  const id = playlistId();
   const head = await fetchHead();
-  if (cache && cache.snapshotId === head.snapshot_id) {
+  if (cache && cache.playlistId === id && cache.snapshotId === head.snapshot_id) {
     return cache;
   }
   const tracks = await fetchAllTracks();
-  cache = { snapshotId: head.snapshot_id, name: head.name, tracks };
+  cache = { playlistId: id, snapshotId: head.snapshot_id, name: head.name, tracks };
   const db = getDb();
   if (db.getSnapshotId() !== head.snapshot_id) {
     db.pruneHeard(new Set(tracks.map((t) => t.id)));

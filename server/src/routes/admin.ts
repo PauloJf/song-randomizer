@@ -1,7 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getDb } from "../db.js";
-import { clearPlaylistCache, getPlaylist, resolveUserNames } from "../playlist.js";
+import {
+  clearPlaylistCache,
+  getPlaylist,
+  playlistId,
+  resolveUserNames,
+} from "../playlist.js";
 import { isConnected, SpotifyError, spotifyFetch } from "../spotify.js";
 import { attemptDelay, clearAttempts } from "../ratelimit.js";
 
@@ -283,6 +288,88 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (!requireAdmin(req, reply)) return;
     clearPlaylistCache();
     return buildOverview();
+  });
+
+  // Playlists the host account owns or follows, for the picker.
+  app.get("/api/admin/playlists", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    try {
+      const playlists: {
+        id: string;
+        name: string;
+        tracks: number;
+        owner: string;
+      }[] = [];
+      let url = "/me/playlists?limit=50";
+      while (url) {
+        const r = await spotifyFetch(url);
+        if (!r.ok) {
+          reply.code(502).send({ error: "spotify_error", status: r.status });
+          return;
+        }
+        const j = (await r.json()) as {
+          items: {
+            id: string;
+            name: string;
+            tracks: { total: number } | null;
+            owner: { display_name?: string | null } | null;
+          }[];
+          next: string | null;
+        };
+        for (const p of j.items) {
+          playlists.push({
+            id: p.id,
+            name: p.name,
+            tracks: p.tracks?.total ?? 0,
+            owner: p.owner?.display_name ?? "",
+          });
+        }
+        url = j.next ?? "";
+      }
+      return { current: playlistId(), playlists };
+    } catch (err) {
+      if (err instanceof SpotifyError) {
+        reply.code(err.status === 401 ? 428 : 502).send({
+          error: err.status === 401 ? "not_connected" : "spotify_error",
+        });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  // Switch the active playlist. Stored in the DB; PLAYLIST_ID env is only
+  // the first-boot default. Heard-lists get pruned automatically by the
+  // snapshot-change logic on the next playlist fetch.
+  app.post("/api/admin/playlist", async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const body = (req.body ?? {}) as { playlistId?: unknown };
+    const id = typeof body.playlistId === "string" ? body.playlistId.trim() : "";
+    if (!id || !/^[A-Za-z0-9]+$/.test(id)) {
+      reply.code(400).send({ error: "playlistId_required" });
+      return;
+    }
+    try {
+      // Validate it exists and is reachable before committing.
+      const r = await spotifyFetch(
+        `/playlists/${encodeURIComponent(id)}?fields=snapshot_id,name`,
+      );
+      if (!r.ok) {
+        reply.code(404).send({ error: "playlist_not_found_or_unreadable" });
+        return;
+      }
+      getDb().setPlaylistId(id);
+      clearPlaylistCache();
+      return buildOverview();
+    } catch (err) {
+      if (err instanceof SpotifyError) {
+        reply.code(err.status === 401 ? 428 : 502).send({
+          error: err.status === 401 ? "not_connected" : "spotify_error",
+        });
+        return;
+      }
+      throw err;
+    }
   });
 
   app.post("/api/admin/spins/:id/undo", async (req, reply) => {

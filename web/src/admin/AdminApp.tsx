@@ -28,6 +28,10 @@ export default function AdminApp() {
   const [spins, setSpins] = useState<AdminSpin[]>([]);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [playlists, setPlaylists] = useState<
+    { id: string; name: string; tracks: number; owner: string }[] | null
+  >(null);
+  const [currentPlaylist, setCurrentPlaylist] = useState<string>("");
   const [logPlayer, setLogPlayer] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -43,6 +47,14 @@ export default function AdminApp() {
     setSpins(s.spins);
     setStats(st);
     setOverview(ov);
+    // Playlist picker is best-effort — unavailable while disconnected.
+    try {
+      const pl = await adminApi.playlists();
+      setPlaylists(pl.playlists);
+      setCurrentPlaylist(pl.current);
+    } catch {
+      setPlaylists(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -313,6 +325,41 @@ export default function AdminApp() {
 
       <section className="admin-section">
         <h2>Playlist</h2>
+        {playlists && playlists.length > 0 && (
+          <div className="admin-log-filter playlist-picker">
+            <select
+              value={currentPlaylist}
+              disabled={busy}
+              onChange={(e) => {
+                const id = e.target.value;
+                const chosen = playlists.find((p) => p.id === id);
+                if (
+                  id !== currentPlaylist &&
+                  chosen &&
+                  window.confirm(
+                    `Switch the wheel to "${chosen.name}"? Heard-histories are pruned to tracks that exist in it.`,
+                  )
+                ) {
+                  void run(async () => {
+                    setOverview(await adminApi.setPlaylist(id));
+                    setCurrentPlaylist(id);
+                  }, `Switched to ${chosen.name}`);
+                }
+              }}
+            >
+              {!playlists.some((p) => p.id === currentPlaylist) && (
+                <option value={currentPlaylist}>
+                  (current: {currentPlaylist})
+                </option>
+              )}
+              {playlists.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.tracks} tracks{p.owner ? ` · ${p.owner}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {stats?.playlistStats ? (
           <>
             <p className="admin-status-line">

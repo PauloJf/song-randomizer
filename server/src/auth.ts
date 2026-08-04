@@ -6,6 +6,7 @@ import { requireApp } from "./routes/appauth.js";
 
 const SCOPES = [
   "playlist-read-private",
+  "playlist-read-collaborative",
   "user-read-playback-state",
   "user-modify-playback-state",
 ].join(" ");

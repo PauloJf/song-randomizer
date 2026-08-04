@@ -138,6 +138,13 @@ export const adminApi = {
     post<{ undone: { player: string; trackId: string; at: string } }>(
       `/api/admin/spins/${id}/undo`,
     ),
+  playlists: () =>
+    json<{
+      current: string;
+      playlists: { id: string; name: string; tracks: number; owner: string }[];
+    }>("/api/admin/playlists"),
+  setPlaylist: (playlistId: string) =>
+    post<AdminOverview>("/api/admin/playlist", { playlistId }),
 };
 
 export type AdminOverview = {
