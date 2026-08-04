@@ -1,15 +1,17 @@
 name: publish
 
-# Fires on every version tag push (e.g. `v0.1`, `v0.1.0`, `v1.2.3-rc1`).
-# Requires three repo secrets:
+# Fires on every version tag push (e.g. `v0.1`, `v0.1.0`, `v1.2.3-rc1`),
+# or manually from the Actions tab (publishes :latest from the chosen ref).
+# Requires two repo secrets:
 #   DOCKERHUB_USERNAME — the Docker Hub account that owns the image
-#   DOCKERHUB_TOKEN    — an access token from that account with read/write scope
-#   DOCKERHUB_PASSWORD — the account password (README sync only; the
-#                        description API rejects access tokens)
+#   DOCKERHUB_PASSWORD — a personal access token with Read, Write & Delete
+#                        scope (Delete is required by the description API
+#                        that the README sync step uses)
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -27,7 +29,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Compute image tags
         id: meta
@@ -52,8 +54,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Docker Hub's description API rejects access tokens (403) — this one
-      # step needs the real account password, hence the separate secret.
       - name: Sync README to Docker Hub
         uses: peter-evans/dockerhub-description@v4
         with:
