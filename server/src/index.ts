@@ -9,6 +9,7 @@ import { registerPlaylistRoutes } from "./routes/playlist.js";
 import { registerPlayersRoutes } from "./routes/players.js";
 import { registerSpinRoutes } from "./routes/spin.js";
 import { registerPlaybackRoutes } from "./routes/playback.js";
+import { registerAdminRoutes } from "./routes/admin.js";
 import { getDb } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,25 @@ const staticRoot = staticCandidates.find((p) => existsSync(p));
 
 const app = Fastify({ logger: true });
 
+// Lenient JSON: some clients send `content-type: application/json` with an
+// empty body on POST/DELETE. Treat that as {} instead of a 400.
+app.addContentTypeParser(
+  "application/json",
+  { parseAs: "string" },
+  (_req, body, done) => {
+    if (body === "" || body == null) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      (err as Error & { statusCode?: number }).statusCode = 400;
+      done(err as Error);
+    }
+  },
+);
+
 const cookieSecret = process.env.COOKIE_SECRET;
 if (!cookieSecret || cookieSecret.length < 16) {
   app.log.warn(
@@ -42,6 +62,7 @@ await registerPlaylistRoutes(app);
 await registerPlayersRoutes(app);
 await registerSpinRoutes(app);
 await registerPlaybackRoutes(app);
+await registerAdminRoutes(app);
 
 // Open the database on boot so schema creation and the one-time state.json
 // import run before the first request.

@@ -3,7 +3,8 @@
 A self-hosted PWA that picks a random song from a Spotify playlist with a decelerating roulette wheel of album covers and a synced tick sound. Built for a small party of players who take turns spinning — the app guarantees no player hears the same song twice.
 
 - **Stack**: Fastify + TypeScript backend, React + Vite frontend, single Docker image.
-- **State**: one JSON file in a Docker volume (`/data/state.json`). No database.
+- **State**: embedded SQLite in a Docker volume (`/data/roulette.db`) via Node's built-in `node:sqlite`. No database server.
+- **Admin**: optional `/admin` panel (set `ADMIN_PASSWORD`) for player management, resets, and per-player spin history.
 - **Auth**: Spotify PKCE, server-side only. Tokens never reach the browser.
 - **Playback**: Spotify Connect (host account must be Premium), deep-link fallback if no device is active.
 
@@ -58,6 +59,7 @@ docker run -d --name spotify-roulette \
 | `BASE_URL` | yes | Public origin, e.g. `https://roulette.example.com` |
 | `PORT` | no | Defaults to `3000` |
 | `COOKIE_SECRET` | yes | Random 32+ char string, signs the PKCE cookie |
+| `ADMIN_PASSWORD` | no | Enables the `/admin` panel (player management, resets, spin logs). Empty = admin disabled, resets open |
 
 ## First run
 
@@ -76,7 +78,7 @@ Full deployment notes (Apache reverse-proxy vhost, HTTPS): see [`DEPLOY.md`](htt
 
 ## Data
 
-State lives at `/data/state.json` inside the container. Mount a named Docker volume so it survives image upgrades:
+State lives in an SQLite database at `/data/roulette.db` inside the container (a legacy `state.json` from older versions is imported automatically on first boot). Mount a named Docker volume so it survives image upgrades:
 
 ```
 -v roulette-state:/data

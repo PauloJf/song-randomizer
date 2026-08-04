@@ -20,6 +20,7 @@ export default function App() {
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [busy, setBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const tickerRef = useRef(new Ticker());
 
   const tracksById = useMemo<Record<string, Track>>(() => {
@@ -115,10 +116,18 @@ export default function App() {
   async function handleResetPlayer(name: string) {
     if (busy) return;
     setBusy(true);
+    setResetError(null);
     try {
       await api.reset(name);
       await refreshPlayers();
       setPhase({ kind: "idle" });
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      setResetError(
+        err.status === 401
+          ? "Resets need the admin login."
+          : `Reset failed: ${err.message}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -186,6 +195,11 @@ export default function App() {
               Back
             </button>
           </div>
+          {resetError && (
+            <p className="err">
+              {resetError} <a href="/admin">Open admin</a>
+            </p>
+          )}
         </section>
       )}
     </main>

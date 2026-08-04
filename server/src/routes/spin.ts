@@ -3,6 +3,7 @@ import { getPlaylist } from "../playlist.js";
 import { SpotifyError } from "../spotify.js";
 import { getDb } from "../db.js";
 import { buildWheelOrder, pickTrackId } from "../spin.js";
+import { isAdmin } from "./admin.js";
 
 type SpinBody = { player?: unknown };
 
@@ -67,7 +68,13 @@ export async function registerSpinRoutes(app: FastifyInstance) {
     return { undone };
   });
 
-  app.post("/api/reset", async (req) => {
+  // Reset requires the admin session when ADMIN_PASSWORD is configured;
+  // on installs without one it stays open (nothing to authenticate against).
+  app.post("/api/reset", async (req, reply) => {
+    if (process.env.ADMIN_PASSWORD && !isAdmin(req)) {
+      reply.code(401).send({ error: "admin_required" });
+      return;
+    }
     const body = (req.body ?? {}) as { player?: unknown };
     const target =
       typeof body.player === "string" && body.player.length ? body.player : null;

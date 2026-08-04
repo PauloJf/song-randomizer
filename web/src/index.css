@@ -326,3 +326,146 @@ body {
   margin: 0.5rem 0 0;
   font-size: 0.9rem;
 }
+
+.err a {
+  color: inherit;
+}
+
+/* -------- Admin -------- */
+
+.admin {
+  align-items: stretch;
+  text-align: left;
+}
+
+.admin h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-head-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-login {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+}
+
+.admin-login input,
+.admin-add input,
+.admin-log-filter select {
+  appearance: none;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  color: inherit;
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;
+}
+
+.admin-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.admin-section h2 {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.admin-table th {
+  text-align: left;
+  color: var(--dim);
+  font-weight: 500;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tr.undone td {
+  opacity: 0.45;
+}
+
+.undone-tag {
+  color: var(--dim);
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  margin-left: 0.35rem;
+}
+
+.admin-when {
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 0.82rem;
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.btn.small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.btn.danger {
+  border-color: #5a3030;
+  color: #ff9a9a;
+}
+
+.admin-add {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.admin-add input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.admin-log-filter {
+  margin-bottom: 0.75rem;
+}
+
+.admin-notice {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 0.9rem;
+}

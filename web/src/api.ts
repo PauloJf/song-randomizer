@@ -71,3 +71,47 @@ export const api = {
       body: JSON.stringify({ trackId }),
     }),
 };
+
+export type AdminPlayer = { name: string; heardCount: number };
+export type AdminSpin = {
+  id: number;
+  player: string;
+  trackId: string;
+  trackName: string | null;
+  artist: string | null;
+  at: string;
+  undone: boolean;
+};
+
+function post<T>(url: string, body?: unknown): Promise<T> {
+  return json<T>(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+export const adminApi = {
+  status: () => json<{ enabled: boolean; admin: boolean }>("/api/admin/status"),
+  login: (password: string) => post<{ admin: true }>("/api/admin/login", { password }),
+  logout: () => post<{ admin: false }>("/api/admin/logout"),
+  players: () => json<{ players: AdminPlayer[] }>("/api/admin/players"),
+  addPlayer: (name: string) =>
+    post<{ players: AdminPlayer[] }>("/api/admin/players", { name }),
+  renamePlayer: (from: string, to: string) =>
+    post<{ players: AdminPlayer[] }>("/api/admin/players/rename", { from, to }),
+  removePlayer: (name: string) =>
+    json<{ players: AdminPlayer[] }>(
+      `/api/admin/players/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    ),
+  reset: (player?: string) =>
+    post<{ reset: string; players: AdminPlayer[] }>(
+      "/api/admin/reset",
+      player ? { player } : {},
+    ),
+  spins: (player?: string) =>
+    json<{ spins: AdminSpin[] }>(
+      `/api/admin/spins${player ? `?player=${encodeURIComponent(player)}` : ""}`,
+    ),
+};

@@ -24,6 +24,7 @@ PLAYERS=Alice,Bob,Carol,Dave
 BASE_URL=https://<your-domain>
 PORT=3000
 COOKIE_SECRET=<any random string ≥ 32 chars>
+ADMIN_PASSWORD=<password for the /admin panel; leave empty to disable>
 ```
 
 ## 3. Bring it up
@@ -32,7 +33,7 @@ COOKIE_SECRET=<any random string ≥ 32 chars>
 docker compose up -d --build
 ```
 
-State (Spotify tokens + heard history + spin log) lives in the named volume `roulette-state` under `/data/state.json`. It survives `docker compose restart`, `docker compose down`, and image rebuilds. It does **not** survive `docker compose down -v` — that removes the volume.
+State (Spotify tokens + players + heard history + spin log) lives in the named volume `roulette-state` as an SQLite database at `/data/roulette.db`. It survives `docker compose restart`, `docker compose down`, and image rebuilds. It does **not** survive `docker compose down -v` — that removes the volume. Upgrading from a pre-SQLite version: the old `state.json` in the same volume is imported automatically on first boot.
 
 ## 4. Apache reverse proxy
 
@@ -52,15 +53,25 @@ Spotify Connect targets whichever device is currently "active". On the host phon
 
 If no device is active, the Play button flips to **Open in Spotify**, which opens the app via `spotify:track:<id>`.
 
-## 7. Debug helpers
+## 7. Admin panel
+
+With `ADMIN_PASSWORD` set, visit `https://<your-domain>/admin` and log in to:
+
+- add, rename, or remove players
+- reset heard-history per player or for everyone (the spin log is kept)
+- browse the spin log, filtered per player
+
+The session lasts 12 hours per browser. When `ADMIN_PASSWORD` is empty, `/admin` is disabled and resets are unauthenticated (original behavior).
+
+## 8. Debug helpers
 
 - `GET /api/health` — liveness
 - `GET /api/auth/status` — is the host account connected?
 - `GET /api/devices` — list Connect devices Spotify sees
 - `GET /api/playlist` — the cached playlist
-- `POST /api/reset` — clear all history (body `{}` for everyone, `{"player":"Alice"}` for one)
+- `POST /api/reset` — clear heard history (body `{}` for everyone, `{"player":"Alice"}` for one); needs the admin session when `ADMIN_PASSWORD` is set
 
-## 8. Updating
+## 9. Updating
 
 ```bash
 git pull

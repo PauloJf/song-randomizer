@@ -13,6 +13,7 @@ services:
       BASE_URL: ${BASE_URL}
       PORT: ${PORT:-3000}
       COOKIE_SECRET: ${COOKIE_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       STATE_DIR: /data
       NODE_ENV: production
     volumes:
